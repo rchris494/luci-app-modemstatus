@@ -1,0 +1,17 @@
+{
+	"luci-app-modemstatus": {
+		"description": "Grant access to modem status resources",
+		"read": {
+			"uci": ["modemstatus"],
+			"ubus": {
+				"luci.modemstatus": ["status"]
+			},
+			"file": {
+				"/usr/bin/sms_tool": ["exec"]
+			}
+		},
+		"write": {
+			"uci": ["modemstatus"]
+		}
+	}
+}

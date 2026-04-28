@@ -1,0 +1,327 @@
+'use strict';
+
+let uci = require('uci').cursor();
+let fs  = require('fs');
+
+function get_config() {
+	return {
+		port:  uci.get('modemstatus', 'global', 'port')  || '/dev/ttyUSB2',
+		baud:  uci.get('modemstatus', 'global', 'baud')  || '115200',
+	};
+}
+
+function run(args) {
+	let fd = fs.popen('/usr/bin/sms_tool ' + args, 'r');
+	if (!fd) return '';
+	let out = fd.read('all');
+	fd.close();
+	return out || '';
+}
+
+function at(port, baud, cmd) {
+	// Use single quotes around AT command to preserve inner double quotes through sh -c
+	let fd = fs.popen("/usr/bin/sms_tool -d " + port + " -b " + baud + " at '" + cmd + "'", 'r');
+	let raw = '';
+	if (fd) { raw = fd.read('all'); fd.close(); }
+	let lines = split(raw, '\n');
+	let result = [];
+	for (let i = 1; i < length(lines); i++) {
+		let l = trim(lines[i]);
+		if (l != '' && l != 'OK') push(result, l);
+	}
+	return join('\n', result);
+}
+
+// RB count to MHz
+function rb_to_mhz(rb) {
+	let rb_i = int(rb);
+	if (rb_i <= 6)   return '1.4';
+	if (rb_i <= 15)  return '3';
+	if (rb_i <= 25)  return '5';
+	if (rb_i <= 50)  return '10';
+	if (rb_i <= 75)  return '15';
+	if (rb_i <= 100) return '20';
+	return rb + ' RB';
+}
+
+// Signal quality thresholds
+function rsrp_qual(v) {
+	if (v >= -80) return 'Excellent';
+	if (v >= -90) return 'Good';
+	if (v >= -100) return 'Fair';
+	return 'Poor';
+}
+function rsrq_qual(v) {
+	if (v >= -10) return 'Excellent';
+	if (v >= -15) return 'Good';
+	if (v >= -20) return 'Fair';
+	return 'Poor';
+}
+function sinr_qual(v) {
+	if (v >= 13)  return 'Excellent';
+	if (v >= 0)   return 'Good';
+	if (v >= -3)  return 'Fair';
+	return 'Poor';
+}
+function rssi_qual(v) {
+	if (v >= -65) return 'Excellent';
+	if (v >= -75) return 'Good';
+	if (v >= -85) return 'Fair';
+	return 'Poor';
+}
+function csq_qual(v) {
+	if (v >= 20) return 'Excellent';
+	if (v >= 15) return 'Good';
+	if (v >= 10) return 'Fair';
+	return 'Poor';
+}
+
+return {
+	'luci.modemstatus': {
+
+		status: {
+			call: function() {
+				let c = get_config();
+				let p = c.port;
+				let b = c.baud;
+
+				// Basic modem info
+				let cgmi   = at(p, b, 'AT+CGMI');
+				let cgmm   = at(p, b, 'AT+CGMM');
+				let cgmr   = at(p, b, 'AT+CGMR');
+				let cgsn   = at(p, b, 'AT+CGSN');
+				let cpin   = at(p, b, 'AT+CPIN?');
+				let qccid  = at(p, b, 'AT+QCCID');
+				let cimi   = at(p, b, 'AT+CIMI');
+
+				// Network
+				let cops   = at(p, b, 'AT+COPS?');
+				at(p, b, 'AT+COPS=3,0');
+				let cops_name = at(p, b, 'AT+COPS?');
+				let qnwinfo = at(p, b, 'AT+QNWINFO');
+				let qendc  = at(p, b, 'AT+QENDC');
+
+				// Signal
+				let qcsq   = at(p, b, 'AT+QCSQ');
+
+				// Carrier aggregation
+				let qcainfo = at(p, b, 'AT+QCAINFO');
+
+				// Serving cell for cell ID / TAC
+				let qeng   = at(p, b, 'AT+QENG="servingcell"');
+
+				// Temperature — use modem-ambient-usr
+				let qtemp  = at(p, b, 'AT+QTEMP');
+
+				// Data counters
+				let qgdcnt = at(p, b, 'AT+QGDCNT?');
+
+				// ── Parse signal ──
+				// +QCSQ: "LTE",-63,-95,6,-10  → sysmode,rssi,rsrp,rsrq,sinr
+				let csq_raw = at(p, b, 'AT+CSQ');
+				let csq_val = 99;
+				let m = match(csq_raw, /\+CSQ: ([0-9]+)/);
+				if (m) csq_val = int(m[1]);
+
+				let rssi = null, rsrp = null, rsrq = null, sinr = null, sysmode = '';
+				// +QCSQ: "LTE",rssi,rsrp,rssnr,rsrq  (field 4=RSSNR skip, field 5=RSRQ)
+				// Use AT+QCAINFO primary band for RSRQ and SINR instead — more accurate
+				m = match(qcsq, /\+QCSQ: "([^"]+)",(-?[0-9]+),(-?[0-9]+),(-?[0-9]+),(-?[0-9]+)/);
+				if (m) {
+					sysmode = m[1];
+					rssi    = int(m[2]);
+					rsrp    = int(m[3]);
+					// m[4] = RSSNR (different scale, skip)
+					rsrq    = int(m[5]);
+				}
+
+				// ── Parse operator name ──
+				let operator = '';
+				m = match(cops_name, /\+COPS: [^"]*"([^"]+)"/);
+				if (m) operator = m[1];
+
+				// ── Parse network info ──
+				// +QNWINFO: "FDD LTE","310410","LTE BAND 2",700
+				let access_tech = '', band_name = '', earfcn_pcc = '';
+				m = match(qnwinfo, /\+QNWINFO: "([^"]+)","([^"]+)","([^"]+)",([0-9]+)/);
+				if (m) {
+					access_tech = m[1];
+					band_name   = m[3];
+					earfcn_pcc  = m[4];
+				}
+
+				// ── Parse EN-DC ──
+				// +QENDC: 1,1,0,1,0 → capable,active,?,?,?
+				let endc_active = false;
+				m = match(qendc, /\+QENDC: ([0-9]),([0-9])/);
+				if (m && int(m[2]) == 1) endc_active = true;
+
+				// ── Parse serving cell ──
+				// +QENG: "servingcell","NOCONN","LTE","FDD",310,410,66A760A,77,700,2,5,5,910E,-95,-10,-63,13,0,-,30
+				let cell_id = '', tac = '', mcc = '', mnc = '', pci_pcc = '', enb_id = '';
+				// Handle both NOCONN (single line) and CONN (multi-line) formats
+				// Single line: +QENG: "servingcell","NOCONN","LTE","FDD",mcc,mnc,cellid,pci,...,tac,...
+				// Multi line:  +QENG: "LTE","FDD",mcc,mnc,cellid,pci,...,tac,...
+				m = match(qeng, /\+QENG: "servingcell","[^"]*","LTE","[^"]*",([0-9]+),([0-9]+),([0-9A-Fa-f]+),([0-9]+),[0-9]+,[0-9]+,[0-9]+,[0-9]+,([0-9A-Fa-f]+)/);
+				if (!m) {
+					// Try multi-line CONN format
+					m = match(qeng, /\+QENG: "LTE","[^"]*",([0-9]+),([0-9]+),([0-9A-Fa-f]+),([0-9]+),[0-9]+,[0-9]+,[0-9]+,[0-9]+,([0-9A-Fa-f]+)/);
+				}
+				if (m) {
+					mcc     = m[1];
+					mnc     = m[2];
+					cell_id = uc(m[3]);
+					pci_pcc = m[4];
+					tac     = uc(m[5]);
+					let hex_fd = fs.popen("printf '%d' 0x" + lc(m[3]), 'r');
+					let cid_int = hex_fd ? int(trim(hex_fd.read('all'))) : 0;
+					if (hex_fd) hex_fd.close();
+					enb_id = '' + (cid_int >> 8);
+				}
+				// Extract NR5G-NSA signal from QENG if present
+				// +QENG: "NR5G-NSA",mcc,mnc,pci,rsrp,sinr,rsrq,earfcn,...
+				let nr_rsrp = null, nr_sinr = null, nr_rsrq = null, nr_pci = '', nr_bw = '?';
+				// NR5G-NSA field order per Quectel manual:
+				// MCC,MNC,PCID,RSRP,SINR,RSRQ,ARFCN,band,NR_DL_bandwidth,scs
+				m = match(qeng, /\+QENG: "NR5G-NSA",[0-9]+,[0-9]+,([0-9]+),(-?[0-9]+),(-?[0-9]+),(-?[0-9]+),([0-9]+),[0-9]+,([0-9]+)/);
+				if (m) {
+					nr_pci  = m[1];
+					nr_rsrp = int(m[2]);
+					nr_sinr = int(m[3]);
+					nr_rsrq = int(m[4]);
+					// NR_DL_bandwidth index to MHz
+					let nr_bw_map = ['5','10','15','20','25','30','40','50','60','70','80','90','100'];
+					nr_bw = (int(m[6]) < length(nr_bw_map) ? nr_bw_map[int(m[6])] : '?') + ' MHz';
+				}
+
+				// ── Parse temperature ──
+				let temp = null;
+				m = match(qtemp, /\+QTEMP:"modem-ambient-usr","([0-9]+)"/);
+				if (m) temp = int(m[1]);
+				// fallback to mdmss-0
+				if (temp == null) {
+					m = match(qtemp, /\+QTEMP:"mdmss-0-usr","([0-9]+)"/);
+					if (m) temp = int(m[1]);
+				}
+
+				// ── Parse data counters ──
+				// +QGDCNT: sent_bytes,recv_bytes
+				let sent_bytes = 0, recv_bytes = 0;
+				m = match(qgdcnt, /\+QGDCNT: ([0-9]+),([0-9]+)/);
+				if (m) { sent_bytes = int(m[1]); recv_bytes = int(m[2]); }
+
+				// ── Parse SIM ──
+				let iccid = '', imsi = '';
+				m = match(qccid, /\+QCCID: ([0-9]+)/);
+				if (m) iccid = m[1];
+				m = match(cimi, /^([0-9]{15})/);
+				if (m) imsi = m[1];
+
+				let sim_status = '';
+				m = match(cpin, /\+CPIN: (.+)/);
+				if (m) sim_status = trim(m[1]);
+
+				// ── Parse CA bands ──
+				// +QCAINFO: "PCC",700,100,"LTE BAND 2",1,77,-95,-10,-63,6
+				// fields: type, earfcn, rbs, band_name, ?, pci, rsrp, rsrq, rssi, sinr
+				let bands = [];
+				let ca_lines = split(qcainfo, '\n');
+				for (let line in ca_lines) {
+					line = trim(line);
+					m = match(line, /\+QCAINFO: "([^"]+)",([0-9]+),([0-9]+),"(LTE[^"]+)",([0-9]+),([0-9]+),(-?[0-9]+),(-?[0-9]+),(-?[0-9]+),(-?[0-9]+)/);
+					if (m) {
+						let bw = rb_to_mhz(m[3]);
+						let brsrp = int(m[7]);
+						let brsrq = int(m[8]);
+						let brssi = int(m[9]);
+						let bsinr = int(m[10]);
+						push(bands, {
+							type:     m[1],
+							earfcn:   m[2],
+							bw:       bw + ' MHz',
+							band:     m[4],
+							pci:      m[6],
+							rsrp:     brsrp,
+							rsrp_q:   rsrp_qual(brsrp),
+							rsrq:     brsrq,
+							rsrq_q:   rsrq_qual(brsrq),
+							rssi:     brssi,
+							rssi_q:   rssi_qual(brssi),
+							sinr:     bsinr,
+							sinr_q:   sinr_qual(bsinr),
+							is_nr:    false
+						});
+					}
+					// NR row: +QCAINFO: "SCC",660768,8,"NR5G BAND 77",323
+					// Only 5 fields - pci is field 5, signal comes from AT+QENG NR5G-NSA line
+					m = match(line, /\+QCAINFO: "([^"]+)",([0-9]+),([0-9]+),"(NR5G[^"]+)",([0-9]+)$/);
+					if (m) {
+						push(bands, {
+							type:     m[1],
+							earfcn:   m[2],
+							bw:       nr_bw,
+							band:     m[4],
+							pci:      m[5],
+							rsrp:     nr_rsrp,
+							rsrp_q:   nr_rsrp != null ? rsrp_qual(nr_rsrp) : '',
+							rsrq:     nr_rsrq,
+							rsrq_q:   nr_rsrq != null ? rsrq_qual(nr_rsrq) : '',
+							rssi:     null,
+							rssi_q:   '',
+							sinr:     nr_sinr,
+							sinr_q:   nr_sinr != null ? sinr_qual(nr_sinr) : '',
+							is_nr:    true
+						});
+					}
+				}
+
+				// Use PCC band SINR (more accurate than AT+QCSQ field)
+				for (let bnd in bands) {
+					if (bnd.type == 'PCC') {
+						sinr = bnd.sinr;
+						break;
+					}
+				}
+
+				// ── Technology label ──
+				let tech = sysmode;
+				if (endc_active) tech = '5G NSA';
+				let ca_count = length(bands);
+				if (ca_count > 1) tech += ' (' + ca_count + 'CA)';
+
+				return {
+					manufacturer: trim(cgmi),
+					model:        trim(cgmm),
+					firmware:     trim(cgmr),
+					imei:         trim(cgsn),
+					iccid:        iccid,
+					imsi:         imsi,
+					sim_status:   sim_status,
+					operator:     operator,
+					mcc:          mcc,
+					mnc:          mnc,
+					technology:   tech,
+					access_tech:  access_tech,
+					cell_id:      cell_id,
+					tac:          tac,
+					enb_id:       enb_id,
+					pci:          pci_pcc,
+					temp:         temp,
+					csq:          csq_val,
+					csq_q:        csq_qual(csq_val),
+					rssi:         rssi,
+					rssi_q:       rssi != null ? rssi_qual(rssi) : '',
+					rsrp:         rsrp,
+					rsrp_q:       rsrp != null ? rsrp_qual(rsrp) : '',
+					rsrq:         rsrq,
+					rsrq_q:       rsrq != null ? rsrq_qual(rsrq) : '',
+					sinr:         sinr,
+					sinr_q:       sinr != null ? sinr_qual(sinr) : '',
+					sent_bytes:   sent_bytes,
+					recv_bytes:   recv_bytes,
+					bands:        bands
+				};
+			}
+		}
+	}
+};
