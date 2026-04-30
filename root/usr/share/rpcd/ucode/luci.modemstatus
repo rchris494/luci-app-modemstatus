@@ -195,13 +195,19 @@ return {
 				}
 
 				// ── Parse temperature ──
+				// Try multiple sensor names across different firmware versions
 				let temp = null;
-				m = match(qtemp, /\+QTEMP:"modem-ambient-usr","([0-9]+)"/);
-				if (m) temp = int(m[1]);
-				// fallback to mdmss-0
-				if (temp == null) {
-					m = match(qtemp, /\+QTEMP:"mdmss-0-usr","([0-9]+)"/);
-					if (m) temp = int(m[1]);
+				let temp_sensors = [
+					'modem-ambient-usr',
+					'sdx-case-therm-usr',
+					'mdmss-0-usr',
+					'mdm-core-usr',
+					'xo-therm-usr',
+					'aoss0-usr'
+				];
+				for (let sensor in temp_sensors) {
+					m = match(qtemp, regexp('\\+QTEMP:"' + sensor + '","([0-9]+)"'));
+					if (m) { temp = int(m[1]); break; }
 				}
 
 				// ── Parse data counters ──
