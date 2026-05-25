@@ -35,7 +35,7 @@ A LuCI application for OpenWrt that provides a real-time signal strength and car
 Clone this repository into your LuCI feed and build:
 
 ```bash
-git clone https://github.com/youruser/luci-app-modemstatus package/luci-app-modemstatus
+git clone https://github.com/rchris494/luci-app-modemstatus package/luci-app-modemstatus
 make menuconfig   # select LuCI > Applications > luci-app-modemstatus
 make package/luci-app-modemstatus/compile
 ```
