@@ -5,8 +5,6 @@
 
 var callStatus = rpc.declare({ object: 'luci.modemstatus', method: 'status' });
 
-var REFRESH = 10;
-
 function fmt_bytes(b) {
 	if (b == null || isNaN(b)) return '—';
 	if (b < 1024) return b + ' B';
@@ -42,7 +40,11 @@ function kv(k, v) {
 }
 
 function hash(v) {
-	return '<span style="font-family:var(--font-mono);font-size:11px;color:var(--color-text-secondary);">' + v + '</span>';
+	return '<span class="hash-val" data-val="' + v + '" style="font-family:var(--font-mono);font-size:11px;color:var(--color-text-secondary);">' + v + '</span>';
+}
+
+function sensitive(v) {
+	return '<span class="hash-val sensitive-val" data-val="' + v + '" style="font-family:var(--font-mono);font-size:11px;color:var(--color-text-secondary);">' + v + '</span>';
 }
 
 function badge(text, color) {
@@ -97,14 +99,14 @@ function render_status(d) {
 	var sim_html =
 		kv('Slot',   'SIM 1') +
 		kv('Status', badge(d.sim_status || '—', d.sim_status === 'READY' ? 'green' : 'amber')) +
-		kv('IMSI',   hash(d.imsi  || '—')) +
-		kv('ICCID',  hash(d.iccid || '—'));
+		kv('IMSI',   sensitive(d.imsi  || '—')) +
+		kv('ICCID',  sensitive(d.iccid || '—'));
 
 	// ── Modem info card ──
 	var modem_html =
 		kv('Type',        (d.manufacturer || '') + ' ' + (d.model || '')) +
 		kv('Firmware',    '<span style="font-size:11px;font-family:var(--font-mono);">' + (d.firmware || '—') + '</span>') +
-		kv('IMEI',        hash(d.imei || '—')) +
+		kv('IMEI',        sensitive(d.imei || '—')) +
 		'<div style="margin-top:6px;display:flex;align-items:center;gap:6px;">' +
 			'<span style="font-size:13px;">🌡</span>' +
 			'<span style="font-size:18px;font-weight:500;">' + (d.temp != null ? d.temp + ' °C' : '—') + '</span>' +
@@ -186,7 +188,7 @@ function render_status(d) {
 		'<th style="padding:7px 8px;text-align:left;font-size:11px;font-weight:500;color:var(--color-text-secondary);border-bottom:0.5px solid var(--color-border-tertiary);width:150px;">Band</th>' +
 		'<th style="padding:7px 8px;text-align:left;font-size:11px;font-weight:500;color:var(--color-text-secondary);border-bottom:0.5px solid var(--color-border-tertiary);width:80px;">BW</th>' +
 		'<th style="padding:7px 8px;text-align:left;font-size:11px;font-weight:500;color:var(--color-text-secondary);border-bottom:0.5px solid var(--color-border-tertiary);width:50px;">PCI</th>' +
-		'<th style="padding:7px 8px;text-align:left;font-size:11px;font-weight:500;color:var(--color-text-secondary);border-bottom:0.5px solid var(--color-border-tertiary);width:70px;">EARFCN</th>' +
+		'<th style="padding:7px 8px;text-align:left;font-size:11px;font-weight:500;color:var(--color-text-secondary);border-bottom:0.5px solid var(--color-border-tertiary);width:70px;">ARFCN</th>' +
 		'<th style="padding:7px 8px;text-align:left;font-size:11px;font-weight:500;color:var(--color-text-secondary);border-bottom:0.5px solid var(--color-border-tertiary);width:115px;">RSSI</th>' +
 		'<th style="padding:7px 8px;text-align:left;font-size:11px;font-weight:500;color:var(--color-text-secondary);border-bottom:0.5px solid var(--color-border-tertiary);width:115px;">RSRP</th>' +
 		'<th style="padding:7px 8px;text-align:left;font-size:11px;font-weight:500;color:var(--color-text-secondary);border-bottom:0.5px solid var(--color-border-tertiary);width:100px;">RSRQ</th>' +
@@ -221,72 +223,77 @@ return view.extend({
 	},
 
 	render: function(data) {
+		var REFRESH = 10;
 		var countdown = REFRESH;
+		var hidden = false;
+		var timer = null;
 		var container = E('div', { style: 'font-size:13px;color:var(--color-text-primary);padding:12px 0;' });
+		var countEl = E('div', { style: 'font-size:11px;color:var(--color-text-secondary);margin-bottom:4px;' },
+			_('Updating again in ') + countdown + _(' second(s).'));
+
+		function apply_hide(hide) {
+			hidden = hide;
+			container.querySelectorAll('.sensitive-val').forEach(function(el) {
+				el.textContent = hide ? '••••••••••••••' : el.dataset.val;
+			});
+		}
+
+		function start_timer() {
+			if (timer) clearInterval(timer);
+			if (REFRESH <= 0) { countEl.textContent = _('Disabled.'); return; }
+			countdown = REFRESH;
+			countEl.textContent = _('Updating again in ') + countdown + _(' second(s).');
+			timer = setInterval(function() {
+				countdown--;
+				if (countdown <= 0) {
+					countEl.textContent = _('Refreshing…');
+					clearInterval(timer);
+					timer = null;
+					callStatus().then(function(d) {
+						container.innerHTML = render_status(d);
+						if (hidden) apply_hide(true);
+						start_timer();
+					});
+					return;
+				}
+				countEl.textContent = _('Updating again in ') + countdown + _(' second(s).');
+			}, 1000);
+		}
+
+		var refreshSel = E('select', { style: 'font-size:12px;', id: 'refresh-select' }, [
+			E('option', { value: '5'  }, '5 ' + _('seconds')),
+			E('option', { value: '10', selected: 'selected' }, '10 ' + _('seconds')),
+			E('option', { value: '30' }, '30 ' + _('seconds')),
+			E('option', { value: '60' }, '60 ' + _('seconds')),
+			E('option', { value: '0'  }, _('Disabled'))
+		]);
+		refreshSel.value = String(REFRESH);
+		refreshSel.addEventListener('change', function() {
+			REFRESH = parseInt(refreshSel.value, 10);
+			start_timer();
+		});
+
+		var hideCheck = E('input', { type: 'checkbox', id: 'hide-check' });
+		hideCheck.addEventListener('change', function() {
+			apply_hide(hideCheck.checked);
+		});
 
 		var topbar = E('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;' }, [
 			E('div', { style: 'display:flex;align-items:center;gap:12px;' }, [
 				E('label', { style: 'font-size:12px;color:var(--color-text-secondary);' }, _('Auto update every:')),
-				E('select', {
-					style: 'font-size:12px;',
-					id: 'refresh-select',
-					onchange: function(e) {
-						countdown = parseInt(e.target.value);
-						REFRESH = countdown;
-						countEl.textContent = _('Updating again in ') + countdown + _(' second(s).');
-					}
-				}, [
-					E('option', { value: '5'  }, '5 ' + _('seconds')),
-					E('option', { value: '10', selected: 'selected' }, '10 ' + _('seconds')),
-					E('option', { value: '30' }, '30 ' + _('seconds')),
-					E('option', { value: '60' }, '60 ' + _('seconds')),
-					E('option', { value: '0'  }, _('Disabled'))
-				])
+				refreshSel
 			]),
 			E('label', { style: 'font-size:12px;color:var(--color-text-secondary);' }, [
-				E('input', {
-					type: 'checkbox',
-					id: 'hide-check',
-					onchange: function(e) {
-						var els = container.querySelectorAll('.hash-val');
-						els.forEach(function(el) { el.textContent = e.target.checked ? '##############' : el.dataset.val; });
-					}
-				}),
+				hideCheck,
 				' ' + _('Hide sensitive data')
 			])
 		]);
-
-		var countEl = E('div', { style: 'font-size:11px;color:var(--color-text-secondary);margin-bottom:4px;' },
-			_('Updating again in ') + countdown + _(' second(s).'));
 
 		var modemLink = E('div', { style: 'font-size:12px;color:var(--color-text-info);margin-bottom:14px;' },
 			(data && data.manufacturer ? data.manufacturer + ' ' + data.model : 'Quectel RM520N-GL') + ' (main)');
 
 		container.innerHTML = render_status(data);
-
-		// Auto-refresh
-		var timer = null;
-		function start_timer() {
-			if (timer) clearInterval(timer);
-			if (REFRESH <= 0) { countEl.textContent = _('Disabled.'); return; }
-			countdown = REFRESH;
-			timer = setInterval(function() {
-				countdown--;
-				if (countdown <= 0) {
-					countEl.textContent = _('Refreshing…');
-					callStatus().then(function(d) {
-						container.innerHTML = render_status(d);
-						countdown = REFRESH;
-					});
-				}
-				countEl.textContent = _('Updating again in ') + countdown + _(' second(s).');
-			}, 1000);
-		}
 		start_timer();
-
-		document.querySelector('#refresh-select') && document.querySelector('#refresh-select').addEventListener('change', function() {
-			start_timer();
-		});
 
 		return E('div', {}, [ topbar, countEl, modemLink, container ]);
 	},
