@@ -7,7 +7,7 @@ LUCI_DESCRIPTION:=Modem signal strength and carrier aggregation status for Quect
 LUCI_PKGARCH:=all
 LUCI_DEPENDS:=+sms-tool
 PKG_VERSION:=1.0.0
-PKG_RELEASE:=1
+PKG_RELEASE:=3
 
 include $(TOPDIR)/feeds/luci/luci.mk
 

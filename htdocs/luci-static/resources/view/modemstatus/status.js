@@ -2,8 +2,10 @@
 'require view';
 'require rpc';
 'require poll';
+'require uci';
 
-var callStatus = rpc.declare({ object: 'luci.modemstatus', method: 'status' });
+var callStatus     = rpc.declare({ object: 'luci.modemstatus', method: 'status' });
+var callSetRefresh = rpc.declare({ object: 'luci.modemstatus', method: 'set_refresh', params: [ 'value' ] });
 
 function fmt_bytes(b) {
 	if (b == null || isNaN(b)) return '—';
@@ -219,11 +221,18 @@ return view.extend({
 	title: _('Signal Strength'),
 
 	load: function() {
-		return callStatus();
+		// Drop any cached copy so the dropdown always reflects what's actually
+		// saved on disk (set_refresh writes via the backend, bypassing the
+		// client-side uci cache, so a plain uci.load could return stale data
+		// on an in-app revisit).
+		uci.unload('modemstatus');
+		return uci.load('modemstatus').then(function() { return callStatus(); });
 	},
 
 	render: function(data) {
-		var REFRESH = 10;
+		var cfgRefresh = uci.get('modemstatus', 'global', 'refresh');
+		var REFRESH = (cfgRefresh != null && cfgRefresh !== '') ? parseInt(cfgRefresh, 10) : 10;
+		if (isNaN(REFRESH) || REFRESH < 0) REFRESH = 10;
 		var countdown = REFRESH;
 		var hidden = false;
 		var timer = null;
@@ -261,8 +270,9 @@ return view.extend({
 		}
 
 		var refreshSel = E('select', { style: 'font-size:12px;', id: 'refresh-select' }, [
+			E('option', { value: '3'  }, '3 ' + _('seconds')),
 			E('option', { value: '5'  }, '5 ' + _('seconds')),
-			E('option', { value: '10', selected: 'selected' }, '10 ' + _('seconds')),
+			E('option', { value: '10' }, '10 ' + _('seconds')),
 			E('option', { value: '30' }, '30 ' + _('seconds')),
 			E('option', { value: '60' }, '60 ' + _('seconds')),
 			E('option', { value: '0'  }, _('Disabled'))
@@ -271,6 +281,8 @@ return view.extend({
 		refreshSel.addEventListener('change', function() {
 			REFRESH = parseInt(refreshSel.value, 10);
 			start_timer();
+			// Persist so the choice survives reloads/navigation.
+			callSetRefresh(String(refreshSel.value)).catch(function() {});
 		});
 
 		var hideCheck = E('input', { type: 'checkbox', id: 'hide-check' });

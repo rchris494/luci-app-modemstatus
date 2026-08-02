@@ -79,6 +79,20 @@ function csq_qual(v) {
 return {
 	'luci.modemstatus': {
 
+		// Persist the auto-update interval (seconds; 0 = disabled) to uci so the
+		// dropdown choice survives page reloads instead of resetting to 10.
+		set_refresh: {
+			args: { value: '10' },
+			call: function(req) {
+				let n = int(req.args.value);
+				if (type(n) != 'int' || n < 0) n = 10;
+				if (n > 3600) n = 3600;
+				uci.set('modemstatus', 'global', 'refresh', '' + n);
+				uci.commit('modemstatus');
+				return { success: true, refresh: n };
+			}
+		},
+
 		status: {
 			call: function() {
 				let c = get_config();
