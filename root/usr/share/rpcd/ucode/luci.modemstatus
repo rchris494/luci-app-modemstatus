@@ -10,17 +10,17 @@ function get_config() {
 	};
 }
 
-function run(args) {
-	let fd = fs.popen('/usr/bin/sms_tool ' + args, 'r');
-	if (!fd) return '';
-	let out = fd.read('all');
-	fd.close();
-	return out || '';
+// Shell-quote an arbitrary value so it survives /bin/sh word-splitting and
+// expansion intact (fs.popen runs the string through the shell). Wraps the
+// value in single quotes and escapes any embedded single quote as '\''.
+// Single-quoting also preserves the inner double quotes of AT commands such
+// as AT+QENG="servingcell" without any backslash escaping.
+function shq(s) {
+	return "'" + replace('' + s, /'/g, "'\\''") + "'";
 }
 
 function at(port, baud, cmd) {
-	// Use single quotes around AT command to preserve inner double quotes through sh -c
-	let fd = fs.popen("/usr/bin/sms_tool -d " + port + " -b " + baud + " at '" + cmd + "'", 'r');
+	let fd = fs.popen('/usr/bin/sms_tool -d ' + shq(port) + ' -b ' + shq(baud) + ' at ' + shq(cmd), 'r');
 	let raw = '';
 	if (fd) { raw = fd.read('all'); fd.close(); }
 	let lines = split(raw, '\n');
