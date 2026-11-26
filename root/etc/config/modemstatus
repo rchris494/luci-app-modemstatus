@@ -1,0 +1,4 @@
+config modemstatus 'global'
+	option port '/dev/ttyUSB2'
+	option baud '115200'
+	option refresh '3'
