@@ -1,13 +1,17 @@
+#
+# Copyright (C) 2008-2019 Jerrykuku
+#
+# This is free software, licensed under the Apache License, Version 2.0 .
+#
 
 include $(TOPDIR)/rules.mk
 
-PKG_NAME:=luci-app-modemstatus
-LUCI_TITLE:=LuCI Modem Signal Strength
-LUCI_DESCRIPTION:=Modem signal strength and carrier aggregation status for Quectel 5G modems
-LUCI_PKGARCH:=all
-LUCI_DEPENDS:=+sms-tool
-PKG_VERSION:=1.0.0
-PKG_RELEASE:=3
+LUCI_TITLE:=Argon Theme
+LUCI_DEPENDS:=+wget +jsonfilter
+PKG_VERSION:=2.4.3
+PKG_RELEASE:=20261124
+
+CONFIG_LUCI_CSSTIDY:=
 
 include $(TOPDIR)/feeds/luci/luci.mk
 
