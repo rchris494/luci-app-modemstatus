@@ -22,6 +22,41 @@ function sig_color(q) {
 	return 'red';
 }
 
+function quality_text(q) {
+	if (q === 'Excellent') return _('Excellent');
+	if (q === 'Good')      return _('Good');
+	if (q === 'Fair')      return _('Fair');
+	if (q === 'Poor')      return _('Poor');
+	return q;
+}
+
+function sim_status_text(s) {
+	if (s === 'READY')           return _('Ready');
+	if (s === 'SIM PIN')         return _('SIM PIN required');
+	if (s === 'SIM PUK')         return _('SIM PUK required');
+	if (s === 'SIM PIN2')        return _('SIM PIN2 required');
+	if (s === 'SIM PUK2')        return _('SIM PUK2 required');
+	if (s === 'SIM NOT INSERTED') return _('SIM not inserted');
+	return s;
+}
+
+function technology_text(tech) {
+	if (!tech) return '—';
+
+	var base = tech;
+	var ca_count = null;
+	var m = tech.match(/^(.+) \(([0-9]+)CA\)$/);
+	if (m) {
+		base = m[1];
+		ca_count = parseInt(m[2], 10);
+	}
+
+	if (base === '5G NSA') base = _('5G NSA');
+	if (base === 'LTE')    base = _('LTE');
+
+	return ca_count != null ? _('%s (%dCA)').format(base, ca_count) : base;
+}
+
 function pill(val, unit, q) {
 	if (val == null) return '<span style="color:var(--color-text-secondary);font-size:12px;">—</span>';
 	var c = sig_color(q);
@@ -31,8 +66,9 @@ function pill(val, unit, q) {
 		red:   { bg: '#FCEBEB', fg: '#A32D2D' }
 	};
 	var col = colors[c] || colors.red;
+	var qtext = q ? quality_text(q) : '';
 	return '<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:10px;font-size:11px;font-weight:500;background:' + col.bg + ';color:' + col.fg + ';">' +
-		val + ' ' + unit + ' <span style="opacity:.8;font-size:10px;font-weight:400;">' + q + '</span></span>';
+		val + ' ' + unit + (qtext ? ' <span style="opacity:.8;font-size:10px;font-weight:400;">' + qtext + '</span>' : '') + '</span>';
 }
 
 function kv(k, v) {
@@ -81,7 +117,7 @@ function card(title, content) {
 }
 
 function render_status(d) {
-	if (!d) return '<p style="color:var(--color-text-secondary);font-size:13px;">Failed to retrieve modem data.</p>';
+	if (!d) return '<p style="color:var(--color-text-secondary);font-size:13px;">' + _('Failed to retrieve modem data.') + '</p>';
 
 	// ── Connection card ──
 	var conn_html =
@@ -89,26 +125,26 @@ function render_status(d) {
 			sig_bars(d.csq) +
 			'<span style="font-size:28px;font-weight:500;">' + (d.csq < 99 ? Math.round((d.csq / 31) * 100) : 0) + '%</span>' +
 		'</div>' +
-		kv('State',      badge('Connected', 'green')) +
-		kv('Operator',   d.operator || '—') +
-		kv('MCC / MNC',  (d.mcc || '—') + ' / ' + (d.mnc || '—')) +
-		kv('Technology', badge(d.technology || '—', 'blue')) +
+		kv(_('State'),      badge(_('Connected'), 'green')) +
+		kv(_('Operator'),   d.operator || '—') +
+		kv(_('MCC / MNC'),  (d.mcc || '—') + ' / ' + (d.mnc || '—')) +
+		kv(_('Technology'), badge(technology_text(d.technology), 'blue')) +
 		'<div style="border-top:0.5px solid var(--color-border-tertiary);margin:6px 0;"></div>' +
-		kv('▲ Sent',     fmt_bytes(d.sent_bytes)) +
-		kv('▼ Received', fmt_bytes(d.recv_bytes));
+		kv(_('▲ Sent'),     fmt_bytes(d.sent_bytes)) +
+		kv(_('▼ Received'), fmt_bytes(d.recv_bytes));
 
 	// ── SIM card ──
 	var sim_html =
-		kv('Slot',   'SIM 1') +
-		kv('Status', badge(d.sim_status || '—', d.sim_status === 'READY' ? 'green' : 'amber')) +
-		kv('IMSI',   sensitive(d.imsi  || '—')) +
-		kv('ICCID',  sensitive(d.iccid || '—'));
+		kv(_('Slot'),   _('SIM 1')) +
+		kv(_('Status'), badge(sim_status_text(d.sim_status) || '—', d.sim_status === 'READY' ? 'green' : 'amber')) +
+		kv(_('IMSI'),   sensitive(d.imsi  || '—')) +
+		kv(_('ICCID'),  sensitive(d.iccid || '—'));
 
 	// ── Modem info card ──
 	var modem_html =
-		kv('Type',        (d.manufacturer || '') + ' ' + (d.model || '')) +
-		kv('Firmware',    '<span style="font-size:11px;font-family:var(--font-mono);">' + (d.firmware || '—') + '</span>') +
-		kv('IMEI',        sensitive(d.imei || '—')) +
+		kv(_('Type'),     (d.manufacturer || '') + ' ' + (d.model || '')) +
+		kv(_('Firmware'), '<span style="font-size:11px;font-family:var(--font-mono);">' + (d.firmware || '—') + '</span>') +
+		kv(_('IMEI'),     sensitive(d.imei || '—')) +
 		'<div style="margin-top:6px;display:flex;align-items:center;gap:6px;">' +
 			'<span style="font-size:13px;">🌡</span>' +
 			'<span style="font-size:18px;font-weight:500;">' + (d.temp != null ? d.temp + ' °C' : '—') + '</span>' +
@@ -116,12 +152,12 @@ function render_status(d) {
 
 	// ── Cell info card ──
 	var cell_html =
-		kv('Cell ID', hash(d.cell_id || '—')) +
-		kv('TAC',     d.tac || '—') +
-		kv('eNB ID',  d.enb_id || '—') +
-		kv('PCI',     d.pci || '—') +
-		kv('MCC',     d.mcc || '—') +
-		kv('MNC',     d.mnc || '—');
+		kv(_('Cell ID'), hash(d.cell_id || '—')) +
+		kv(_('TAC'),     d.tac || '—') +
+		kv(_('eNB ID'),  d.enb_id || '—') +
+		kv(_('PCI'),     d.pci || '—') +
+		kv(_('MCC'),     d.mcc || '—') +
+		kv(_('MNC'),     d.mnc || '—');
 
 	// ── Signal levels card (primary band) ──
 	function bar_html(pct, q) {
@@ -134,7 +170,9 @@ function render_status(d) {
 
 	function sig_row(name, val, unit, q, pct, desc) {
 		var qcolor = { Excellent: '#3B6D11', Good: '#854F0B', Fair: '#854F0B', Poor: '#A32D2D' };
-		var vstr = val != null ? val + ' ' + unit + ' | ' + q : '—';
+		var qtext = quality_text(q);
+		var vval = val != null ? val + (unit ? ' ' + unit : '') : '';
+		var vstr = val != null ? vval + (qtext ? ' | ' + qtext : '') : '—';
 		return '<div style="margin-bottom:14px;">' +
 			'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px;">' +
 				'<span style="font-size:13px;font-weight:500;">' + name + '</span>' +
@@ -152,11 +190,11 @@ function render_status(d) {
 	var sinr_pct = d.sinr != null ? Math.round(Math.max(0, (d.sinr + 20)  / 50 * 100)) : 0;
 
 	var sigcard_html =
-		sig_row('CSQ',  d.csq < 99 ? d.csq : null, '',    d.csq_q  || '', csq_pct,  'Signal strength (0–31 scale)') +
-		sig_row('RSSI', d.rssi, 'dBm', d.rssi_q || '', rssi_pct, 'Received signal strength indicator') +
-		sig_row('RSRP', d.rsrp, 'dBm', d.rsrp_q || '', rsrp_pct, 'Reference signal received power') +
-		sig_row('RSRQ', d.rsrq, 'dB',  d.rsrq_q || '', rsrq_pct, 'Reference signal received quality') +
-		sig_row('SINR', d.sinr, 'dB',  d.sinr_q || '', sinr_pct, 'Signal to interference + noise ratio');
+		sig_row(_('CSQ'),  d.csq < 99 ? d.csq : null, '',    d.csq_q  || '', csq_pct,  _('Signal strength (0–31 scale)')) +
+		sig_row(_('RSSI'), d.rssi, 'dBm', d.rssi_q || '', rssi_pct, _('Received signal strength indicator')) +
+		sig_row(_('RSRP'), d.rsrp, 'dBm', d.rsrp_q || '', rsrp_pct, _('Reference signal received power')) +
+		sig_row(_('RSRQ'), d.rsrq, 'dB',  d.rsrq_q || '', rsrq_pct, _('Reference signal received quality')) +
+		sig_row(_('SINR'), d.sinr, 'dB',  d.sinr_q || '', sinr_pct, _('Signal to interference + noise ratio'));
 
 	// ── Band table ──
 	var band_rows = '';
@@ -181,36 +219,36 @@ function render_status(d) {
 			'<td style="padding:7px 8px;">' + pill(b.sinr, 'dB',  b.sinr_q) + '</td>' +
 			'</tr>';
 	}
-	if (!band_rows) band_rows = '<tr><td colspan="8" style="padding:1.5em;text-align:center;color:var(--color-text-secondary);font-size:12px;">No carrier aggregation data</td></tr>';
+	if (!band_rows) band_rows = '<tr><td colspan="8" style="padding:1.5em;text-align:center;color:var(--color-text-secondary);font-size:12px;">' + _('No carrier aggregation data') + '</td></tr>';
 
 	var band_html =
 		'<div style="overflow-x:auto;">' +
 		'<table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed;">' +
 		'<thead><tr style="background:var(--color-background-secondary);">' +
-		'<th style="padding:7px 8px;text-align:left;font-size:11px;font-weight:500;color:var(--color-text-secondary);border-bottom:0.5px solid var(--color-border-tertiary);width:150px;">Band</th>' +
-		'<th style="padding:7px 8px;text-align:left;font-size:11px;font-weight:500;color:var(--color-text-secondary);border-bottom:0.5px solid var(--color-border-tertiary);width:80px;">BW</th>' +
-		'<th style="padding:7px 8px;text-align:left;font-size:11px;font-weight:500;color:var(--color-text-secondary);border-bottom:0.5px solid var(--color-border-tertiary);width:50px;">PCI</th>' +
-		'<th style="padding:7px 8px;text-align:left;font-size:11px;font-weight:500;color:var(--color-text-secondary);border-bottom:0.5px solid var(--color-border-tertiary);width:70px;">ARFCN</th>' +
-		'<th style="padding:7px 8px;text-align:left;font-size:11px;font-weight:500;color:var(--color-text-secondary);border-bottom:0.5px solid var(--color-border-tertiary);width:115px;">RSSI</th>' +
-		'<th style="padding:7px 8px;text-align:left;font-size:11px;font-weight:500;color:var(--color-text-secondary);border-bottom:0.5px solid var(--color-border-tertiary);width:115px;">RSRP</th>' +
-		'<th style="padding:7px 8px;text-align:left;font-size:11px;font-weight:500;color:var(--color-text-secondary);border-bottom:0.5px solid var(--color-border-tertiary);width:100px;">RSRQ</th>' +
-		'<th style="padding:7px 8px;text-align:left;font-size:11px;font-weight:500;color:var(--color-text-secondary);border-bottom:0.5px solid var(--color-border-tertiary);width:100px;">SINR</th>' +
+		'<th style="padding:7px 8px;text-align:left;font-size:11px;font-weight:500;color:var(--color-text-secondary);border-bottom:0.5px solid var(--color-border-tertiary);width:150px;">' + _('Band') + '</th>' +
+		'<th style="padding:7px 8px;text-align:left;font-size:11px;font-weight:500;color:var(--color-text-secondary);border-bottom:0.5px solid var(--color-border-tertiary);width:80px;">' + _('BW') + '</th>' +
+		'<th style="padding:7px 8px;text-align:left;font-size:11px;font-weight:500;color:var(--color-text-secondary);border-bottom:0.5px solid var(--color-border-tertiary);width:50px;">' + _('PCI') + '</th>' +
+		'<th style="padding:7px 8px;text-align:left;font-size:11px;font-weight:500;color:var(--color-text-secondary);border-bottom:0.5px solid var(--color-border-tertiary);width:70px;">' + _('ARFCN') + '</th>' +
+		'<th style="padding:7px 8px;text-align:left;font-size:11px;font-weight:500;color:var(--color-text-secondary);border-bottom:0.5px solid var(--color-border-tertiary);width:115px;">' + _('RSSI') + '</th>' +
+		'<th style="padding:7px 8px;text-align:left;font-size:11px;font-weight:500;color:var(--color-text-secondary);border-bottom:0.5px solid var(--color-border-tertiary);width:115px;">' + _('RSRP') + '</th>' +
+		'<th style="padding:7px 8px;text-align:left;font-size:11px;font-weight:500;color:var(--color-text-secondary);border-bottom:0.5px solid var(--color-border-tertiary);width:100px;">' + _('RSRQ') + '</th>' +
+		'<th style="padding:7px 8px;text-align:left;font-size:11px;font-weight:500;color:var(--color-text-secondary);border-bottom:0.5px solid var(--color-border-tertiary);width:100px;">' + _('SINR') + '</th>' +
 		'</tr></thead>' +
 		'<tbody>' + band_rows + '</tbody>' +
 		'</table></div>';
 
 	return (
 		'<div style="display:grid;grid-template-columns:2fr 1.4fr 1.4fr 1.2fr;gap:14px;margin-bottom:18px;">' +
-			card('Connection',    conn_html) +
-			card('SIM card',      sim_html) +
-			card('Modem',         modem_html) +
-			card('Cell info',     cell_html) +
+			card(_('Connection'), conn_html) +
+			card(_('SIM card'),   sim_html) +
+			card(_('Modem'),      modem_html) +
+			card(_('Cell info'),  cell_html) +
 		'</div>' +
-		'<div style="font-size:15px;font-weight:500;margin-bottom:8px;">Primary band signal</div>' +
+		'<div style="font-size:15px;font-weight:500;margin-bottom:8px;">' + _('Primary band signal') + '</div>' +
 		'<div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:16px 18px;margin-bottom:14px;">' +
 			sigcard_html +
 		'</div>' +
-		'<div style="font-size:15px;font-weight:500;margin-bottom:8px;">Bands</div>' +
+		'<div style="font-size:15px;font-weight:500;margin-bottom:8px;">' + _('Bands') + '</div>' +
 		'<div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;">' +
 			band_html +
 		'</div>'
@@ -238,7 +276,7 @@ return view.extend({
 		var timer = null;
 		var container = E('div', { style: 'font-size:13px;color:var(--color-text-primary);padding:12px 0;' });
 		var countEl = E('div', { style: 'font-size:11px;color:var(--color-text-secondary);margin-bottom:4px;' },
-			_('Updating again in ') + countdown + _(' second(s).'));
+			N_(countdown, 'Updating again in %d second.', 'Updating again in %d seconds.').format(countdown));
 
 		function apply_hide(hide) {
 			hidden = hide;
@@ -251,7 +289,7 @@ return view.extend({
 			if (timer) clearInterval(timer);
 			if (REFRESH <= 0) { countEl.textContent = _('Disabled.'); return; }
 			countdown = REFRESH;
-			countEl.textContent = _('Updating again in ') + countdown + _(' second(s).');
+			countEl.textContent = N_(countdown, 'Updating again in %d second.', 'Updating again in %d seconds.').format(countdown);
 			timer = setInterval(function() {
 				countdown--;
 				if (countdown <= 0) {
@@ -265,16 +303,16 @@ return view.extend({
 					});
 					return;
 				}
-				countEl.textContent = _('Updating again in ') + countdown + _(' second(s).');
+				countEl.textContent = N_(countdown, 'Updating again in %d second.', 'Updating again in %d seconds.').format(countdown);
 			}, 1000);
 		}
 
 		var refreshSel = E('select', { style: 'font-size:12px;', id: 'refresh-select' }, [
-			E('option', { value: '3'  }, '3 ' + _('seconds')),
-			E('option', { value: '5'  }, '5 ' + _('seconds')),
-			E('option', { value: '10' }, '10 ' + _('seconds')),
-			E('option', { value: '30' }, '30 ' + _('seconds')),
-			E('option', { value: '60' }, '60 ' + _('seconds')),
+			E('option', { value: '3'  }, _('%d seconds').format(3)),
+			E('option', { value: '5'  }, _('%d seconds').format(5)),
+			E('option', { value: '10' }, _('%d seconds').format(10)),
+			E('option', { value: '30' }, _('%d seconds').format(30)),
+			E('option', { value: '60' }, _('%d seconds').format(60)),
 			E('option', { value: '0'  }, _('Disabled'))
 		]);
 		refreshSel.value = String(REFRESH);
@@ -302,7 +340,7 @@ return view.extend({
 		]);
 
 		var modemLink = E('div', { style: 'font-size:12px;color:var(--color-text-info);margin-bottom:14px;' },
-			(data && data.manufacturer ? data.manufacturer + ' ' + data.model : 'Quectel RM520N-GL') + ' (main)');
+			_('%s (main)').format(data && data.manufacturer ? data.manufacturer + ' ' + data.model : 'Quectel RM520N-GL'));
 
 		container.innerHTML = render_status(data);
 		start_timer();
