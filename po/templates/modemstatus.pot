@@ -1,0 +1,208 @@
+# Translation template for luci-app-modemstatus
+msgid ""
+msgstr ""
+"Project-Id-Version: luci-app-modemstatus\n"
+"POT-Creation-Date: 2026-11-27 12:00+0800\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "Excellent"
+msgstr ""
+
+msgid "Good"
+msgstr ""
+
+msgid "Fair"
+msgstr ""
+
+msgid "Poor"
+msgstr ""
+
+msgid "Ready"
+msgstr ""
+
+msgid "SIM PIN required"
+msgstr ""
+
+msgid "SIM PUK required"
+msgstr ""
+
+msgid "SIM PIN2 required"
+msgstr ""
+
+msgid "SIM PUK2 required"
+msgstr ""
+
+msgid "SIM not inserted"
+msgstr ""
+
+msgid "Failed to retrieve modem data."
+msgstr ""
+
+msgid "State"
+msgstr ""
+
+msgid "Connected"
+msgstr ""
+
+msgid "Operator"
+msgstr ""
+
+msgid "MCC / MNC"
+msgstr ""
+
+msgid "Technology"
+msgstr ""
+
+msgid "▲ Sent"
+msgstr ""
+
+msgid "▼ Received"
+msgstr ""
+
+msgid "Slot"
+msgstr ""
+
+msgid "SIM 1"
+msgstr ""
+
+msgid "Status"
+msgstr ""
+
+msgid "IMSI"
+msgstr ""
+
+msgid "ICCID"
+msgstr ""
+
+msgid "Type"
+msgstr ""
+
+msgid "Firmware"
+msgstr ""
+
+msgid "IMEI"
+msgstr ""
+
+msgid "Cell ID"
+msgstr ""
+
+msgid "TAC"
+msgstr ""
+
+msgid "eNB ID"
+msgstr ""
+
+msgid "PCI"
+msgstr ""
+
+msgid "MCC"
+msgstr ""
+
+msgid "MNC"
+msgstr ""
+
+msgid "CSQ"
+msgstr ""
+
+msgid "Signal strength (0–31 scale)"
+msgstr ""
+
+msgid "RSSI"
+msgstr ""
+
+msgid "Received signal strength indicator"
+msgstr ""
+
+msgid "RSRP"
+msgstr ""
+
+msgid "Reference signal received power"
+msgstr ""
+
+msgid "RSRQ"
+msgstr ""
+
+msgid "Reference signal received quality"
+msgstr ""
+
+msgid "SINR"
+msgstr ""
+
+msgid "Signal to interference + noise ratio"
+msgstr ""
+
+msgid "No carrier aggregation data"
+msgstr ""
+
+msgid "Band"
+msgstr ""
+
+msgid "BW"
+msgstr ""
+
+msgid "ARFCN"
+msgstr ""
+
+msgid "Connection"
+msgstr ""
+
+msgid "SIM card"
+msgstr ""
+
+msgid "Modem"
+msgstr ""
+
+msgid "Cell info"
+msgstr ""
+
+msgid "Primary band signal"
+msgstr ""
+
+msgid "Bands"
+msgstr ""
+
+msgid "Signal Strength"
+msgstr ""
+
+#, c-format
+msgid "Updating again in %d second."
+msgid_plural "Updating again in %d seconds."
+msgstr[0] ""
+
+msgid "Disabled."
+msgstr ""
+
+msgid "Refreshing…"
+msgstr ""
+
+#, c-format
+msgid "%d seconds"
+msgstr ""
+
+msgid "Disabled"
+msgstr ""
+
+msgid "Auto update every:"
+msgstr ""
+
+msgid "Hide sensitive data"
+msgstr ""
+
+#, c-format
+msgid "%s (main)"
+msgstr ""
+
+msgid "5G NSA"
+msgstr ""
+
+msgid "LTE"
+msgstr ""
+
+#, c-format
+msgid "%s (%dCA)"
+msgstr ""
+
+msgid "Grant access to modem status resources"
+msgstr ""
